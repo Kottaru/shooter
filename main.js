@@ -1,139 +1,158 @@
 /**
- * BLOCK KRUNK ENGINE - PURE JS & WEBGL
+ * BLOCK FPS ENGINE - V3 (PURE JS)
  */
-
 const canvas = document.getElementById('gameCanvas');
-const gl = canvas.getContext('webgl');
+const ctx = canvas.getContext('2d');
 
-// --- Configurações Gameplay ---
+// --- Configuração do Mundo ---
+const MAP_SIZE = 20;
+const FOV = Math.PI / 3;
 const player = {
-    x: 10, y: 2, z: 10,
-    vx: 0, vy: 0, vz: 0,
-    yaw: 0, pitch: 0,
-    hp: 100, kills: 0, grounded: false,
-    weapon: 'RIFLE', lastShot: 0
+    x: 10, y: 10, dir: 0,
+    hp: 100, kills: 0,
+    weapon: 'RIFLE'
 };
 
-const weapons = {
-    'RIFLE': { dmg: 30, rate: 120, spread: 0.02 },
-    'SNIPER': { dmg: 100, rate: 800, spread: 0 },
-    'PISTOL': { dmg: 15, rate: 200, spread: 0.01 }
-};
-
-let bots = [
-    {x: -10, z: -10, hp: 100, r: 1.5},
-    {x: 20, z: -30, hp: 100, r: 1.5},
-    {x: -25, z: 20, hp: 100, r: 1.5}
+// Mapa: 1 = Parede/Caixa, 0 = Caminho
+const worldMap = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,0,0,0,1,1,1,0,0,0,0,0,1,1,0,0,1],
+    [1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,1],
+    [1,0,0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0,0,1],
+    [1,0,0,0,0,0,1,1,0,0,0,1,1,0,0,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
 
+// --- Armas ---
+const weapons = {
+    'RIFLE': { dmg: 34, range: 20, color: '#444', size: [60, 220] },
+    'PISTOLA': { dmg: 20, range: 10, color: '#222', size: [40, 150] },
+    'FACA': { dmg: 100, range: 1.5, color: '#888', size: [20, 180] }
+};
+
+// --- Inputs ---
 const keys = {};
-document.onkeydown = e => keys[e.code] = true;
+document.onkeydown = e => {
+    keys[e.code] = true;
+    if(e.code === 'Digit1') setWeapon('RIFLE');
+    if(e.code === 'Digit2') setWeapon('PISTOLA');
+    if(e.code === 'Digit3') setWeapon('FACA');
+};
 document.onkeyup = e => keys[e.code] = false;
 
-canvas.onclick = () => canvas.requestPointerLock();
+canvas.onclick = () => {
+    canvas.requestPointerLock();
+    shoot();
+};
+
 document.onmousemove = e => {
     if (document.pointerLockElement === canvas) {
-        player.yaw -= e.movementX * 0.003;
-        player.pitch = Math.max(-1.5, Math.min(1.5, player.pitch - e.movementY * 0.003));
+        player.dir += e.movementX * 0.003;
     }
 };
 
-// --- Sistema de Tiro (Hitscan) ---
+function setWeapon(type) {
+    player.weapon = type;
+    const model = document.getElementById('weapon-model');
+    const w = weapons[type];
+    document.getElementById('weapon-display').innerText = type;
+    model.style.width = w.size[0] + 'px';
+    model.style.height = w.size[1] + 'px';
+    model.style.background = w.color;
+}
+
+// --- Combate ---
 function shoot() {
+    // Efeito visual de recuo
+    const model = document.getElementById('viewmodel');
+    model.style.transform = 'translateY(40px) rotate(5deg)';
+    setTimeout(() => model.style.transform = 'translateY(0) rotate(0)', 100);
+
+    // Lógica simples de hitscan (apenas checa se há parede na frente)
+    let rayX = player.x;
+    let rayY = player.y;
+    let step = 0.1;
     const w = weapons[player.weapon];
-    if (Date.now() - player.lastShot < w.rate) return;
-    player.lastShot = Date.now();
 
-    // Direção do tiro
-    const dx = -Math.sin(player.yaw) * Math.cos(player.pitch);
-    const dz = -Math.cos(player.yaw) * Math.cos(player.pitch);
-
-    bots.forEach(bot => {
-        // Cálculo simplificado de colisão (Raio vs Esfera)
-        const bx = bot.x - player.x;
-        const bz = bot.z - player.z;
-        const dist = Math.sqrt(bx*bx + bz*bz);
-        
-        // Verifica se o bot está na frente e na mira
-        const dot = (bx * dx + bz * dz) / dist;
-        if (dot > 0.99 && dist < 100) {
-            bot.hp -= w.dmg;
-            if (bot.hp <= 0) {
-                bot.hp = 100; bot.x = (Math.random()-0.5)*100; bot.z = (Math.random()-0.5)*100;
+    for(let i=0; i < w.range / step; i++) {
+        rayX += Math.cos(player.dir) * step;
+        rayY += Math.sin(player.dir) * step;
+        if(worldMap[Math.floor(rayY)][Math.floor(rayX)] === 1) {
+            // Se atingiu uma parede, simula morte de bot (opcional)
+            if(Math.random() > 0.8) {
                 player.kills++;
-                showKill("VOCÊ ELIMINOU UM BOT!");
+                document.getElementById('kills').innerText = player.kills;
+            }
+            break;
+        }
+    }
+}
+
+// --- Loop de Renderização (Raycasting Pseudo-3D) ---
+function render() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Chão e Teto
+    ctx.fillStyle = "#333"; // Teto
+    ctx.fillRect(0, 0, canvas.width, canvas.height/2);
+    ctx.fillStyle = "#555"; // Chão
+    ctx.fillRect(0, canvas.height/2, canvas.width, canvas.height/2);
+
+    const numRays = canvas.width / 2;
+    const step = FOV / numRays;
+
+    for (let i = 0; i < numRays; i++) {
+        const rayDir = player.dir - FOV / 2 + i * step;
+        let distance = 0;
+        let hitWall = false;
+
+        const eyeX = Math.cos(rayDir);
+        const eyeY = Math.sin(rayDir);
+
+        while (!hitWall && distance < 20) {
+            distance += 0.05;
+            let testX = Math.floor(player.x + eyeX * distance);
+            let testY = Math.floor(player.y + eyeY * distance);
+
+            if (testX < 0 || testX >= MAP_SIZE || testY < 0 || testY >= worldMap.length) {
+                hitWall = true; distance = 20;
+            } else if (worldMap[testY][testX] === 1) {
+                hitWall = true;
             }
         }
-    });
-}
 
-function showKill(txt) {
-    const feed = document.getElementById('kill-feed');
-    feed.innerHTML = `<div>${txt}</div>` + feed.innerHTML;
-    setTimeout(() => feed.lastChild?.remove(), 3000);
-}
+        const ceiling = canvas.height / 2 - canvas.height / distance;
+        const floor = canvas.height - ceiling;
+        const wallHeight = floor - ceiling;
 
-// --- Física e Movimento Arcade ---
-function update() {
-    const moveX = (keys['KeyD']?1:0) - (keys['KeyA']?1:0);
-    const moveZ = (keys['KeyS']?1:0) - (keys['KeyW']?1:0);
-    
-    const accel = player.grounded ? 0.015 : 0.005;
-    const friction = keys['ShiftLeft'] ? 0.98 : 0.92; // Slide no Shift
-
-    const forwardX = -Math.sin(player.yaw);
-    const forwardZ = -Math.cos(player.yaw);
-    const rightX = Math.cos(player.yaw);
-    const rightZ = -Math.sin(player.yaw);
-
-    player.vx += (moveX * rightX + moveZ * forwardX) * accel;
-    player.vz += (moveX * rightZ + moveZ * forwardZ) * accel;
-
-    // Bunny Hop
-    if (keys['Space'] && player.grounded) {
-        player.vy = 0.15;
-        player.grounded = false;
-        if (keys['ShiftLeft']) { player.vx *= 1.1; player.vz *= 1.1; } // Slide Hop boost
+        // Sombreamento por distância
+        const shade = 255 / (1 + distance * distance * 0.1);
+        ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+        ctx.fillRect(i * 2, ceiling, 2, wallHeight);
     }
 
-    player.vy -= 0.008; // Gravidade
-    player.x += player.vx; player.y += player.vy; player.z += player.vz;
+    // Movimentação
+    const moveSpeed = 0.05;
+    let nextX = player.x;
+    let nextY = player.y;
 
-    if (player.y < 2) { 
-        player.y = 2; player.vy = 0; player.grounded = true; 
-        player.vx *= friction; player.vz *= friction; 
+    if (keys['KeyW']) { nextX += Math.cos(player.dir) * moveSpeed; nextY += Math.sin(player.dir) * moveSpeed; }
+    if (keys['KeyS']) { nextX -= Math.cos(player.dir) * moveSpeed; nextY -= Math.sin(player.dir) * moveSpeed; }
+    if (keys['KeyA']) { nextX += Math.sin(player.dir) * moveSpeed; nextY -= Math.cos(player.dir) * moveSpeed; }
+    if (keys['KeyD']) { nextX -= Math.sin(player.dir) * moveSpeed; nextY += Math.cos(player.dir) * moveSpeed; }
+
+    // Colisão simples
+    if (worldMap[Math.floor(nextY)][Math.floor(nextX)] === 0) {
+        player.x = nextX;
+        player.y = nextY;
     }
 
-    if (keys['Digit1']) player.weapon = 'RIFLE';
-    if (keys['Digit2']) player.weapon = 'SNIPER';
-    if (keys['Digit3']) player.weapon = 'PISTOL';
-    if (mouse.down || keys['ControlLeft']) shoot();
-
-    // UI
-    document.getElementById('spd').innerText = Math.round(Math.hypot(player.vx, player.vz) * 100);
-    document.getElementById('kills').innerText = player.kills;
-    document.getElementById('weapon-display').innerText = player.weapon;
-}
-
-let mouse = {down: false};
-window.onmousedown = () => mouse.down = true;
-window.onmouseup = () => mouse.down = false;
-
-// --- Loop Principal ---
-function loop() {
-    update();
-    // Renderização simplificada (Fundo)
-    gl.clearColor(0.1, 0.1, 0.15, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    
-    // Como prometido: Código otimizado para rodar em PC fraco.
-    // O WebGL aqui está limpando o buffer. Em um jogo real, 
-    // desenharíamos os cubos aqui.
-    
-    requestAnimationFrame(loop);
+    requestAnimationFrame(render);
 }
 
 document.getElementById('overlay').onclick = () => {
     document.getElementById('overlay').style.display = 'none';
-    loop();
+    render();
 };

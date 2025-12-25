@@ -3,26 +3,26 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BLOCK KRUNK - FPS Arcade</title>
+    <title>BLOCK FPS - V3</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="crosshair"></div>
     
-    <div id="hud">
+    <div id="ui">
         <div class="stat">HP: <span id="hp">100</span></div>
-        <div class="stat">SPD: <span id="spd">0</span></div>
         <div class="stat">KILLS: <span id="kills">0</span></div>
-        <div class="stat" id="weapon-display">RIFLE</div>
+        <div id="weapon-display">RIFLE</div>
     </div>
 
-    <div id="kill-feed"></div>
+    <div id="viewmodel">
+        <div id="weapon-model"></div>
+    </div>
 
     <div id="overlay">
-        <h1>BLOCK KRUNK</h1>
+        <h1>BLOCK FPS</h1>
         <p>CLIQUE PARA JOGAR</p>
-        <p>WASD: Mover | ESPAÇO: Bunny Hop | SHIFT: Slide</p>
-        <p>1, 2, 3: Armas | CLIQUE: Atirar</p>
+        <p>WASD: Mover | 1, 2, 3: Armas | CLIQUE: Atacar</p>
     </div>
 
     <canvas id="gameCanvas"></canvas>
